@@ -32,7 +32,7 @@ export function getQuery(values) {
   if (!business_complexed.includes(values) && key_values.length === 1) {
     return 'SELECT * from hab_business where '+ 
       key_values + " = '" + values[key_values] + "'" +
-      " order by id desc limit 1"
+      "and business_status = 1 order by id desc limit 1"
   }
 
   return null;

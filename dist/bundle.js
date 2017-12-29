@@ -7435,9 +7435,8 @@ function getCommandLine() {
       choices: ['id', 'mail', 'phone', 'active'],
       default: 'active'
     }
-  }).help('h').argv;
+  }).help().argv;
 
-  // return [process.argv.slice(2)[0], parser(process.argv.slice(2))]
   var values = parser(process.argv.slice(2));
   var hab_type = values._[0];
   delete values._;
@@ -18830,7 +18829,7 @@ function executeQuery(query) {
 function getQuery(values) {
   var key_values = Object.keys(values);
   if (!business_complexed.includes(values) && key_values.length === 1) {
-    return 'SELECT * from hab_business where ' + key_values + "= '" + values[key_values] + "'";
+    return 'SELECT * from hab_business where ' + key_values + " = '" + values[key_values] + "'" + " order by id desc limit 1";
   }
 
   return null;

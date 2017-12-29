@@ -19,6 +19,7 @@ export function getCommandLine() {
         default: 'active',
       }
     })
+    .help()
     .argv
 
   var values = parser(process.argv.slice(2))
