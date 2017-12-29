@@ -60,7 +60,7 @@
 /******/ 	__webpack_require__.p = "";
 /******/
 /******/ 	// Load entry module and return exports
-/******/ 	return __webpack_require__(__webpack_require__.s = 55);
+/******/ 	return __webpack_require__(__webpack_require__.s = 56);
 /******/ })
 /************************************************************************/
 /******/ ([
@@ -162,7 +162,7 @@ exports.ComStatisticsPacket = __webpack_require__(167);
 exports.EmptyPacket = __webpack_require__(168);
 exports.EofPacket = __webpack_require__(169);
 exports.ErrorPacket = __webpack_require__(170);
-exports.Field = __webpack_require__(41);
+exports.Field = __webpack_require__(42);
 exports.FieldPacket = __webpack_require__(171);
 exports.HandshakeInitializationPacket = __webpack_require__(172);
 exports.LocalDataFilePacket = __webpack_require__(173);
@@ -371,8 +371,8 @@ var util = __webpack_require__(9);
 util.inherits = __webpack_require__(10);
 /*</replacement>*/
 
-var Readable = __webpack_require__(44);
-var Writable = __webpack_require__(47);
+var Readable = __webpack_require__(45);
+var Writable = __webpack_require__(48);
 
 util.inherits(Duplex, Readable);
 
@@ -603,7 +603,7 @@ module.exports = YError
 
 "use strict";
 
-var ansiRegex = __webpack_require__(70)();
+var ansiRegex = __webpack_require__(71)();
 
 module.exports = function (str) {
 	return typeof str === 'string' ? str.replace(ansiRegex, '') : str;
@@ -614,14 +614,14 @@ module.exports = function (str) {
 /* 13 */
 /***/ (function(module, exports, __webpack_require__) {
 
-var Crypto           = __webpack_require__(39);
+var Crypto           = __webpack_require__(40);
 var Events           = __webpack_require__(5);
 var Net              = __webpack_require__(151);
 var tls              = __webpack_require__(152);
 var ConnectionConfig = __webpack_require__(19);
 var Protocol         = __webpack_require__(154);
-var SqlString        = __webpack_require__(50);
-var Query            = __webpack_require__(43);
+var SqlString        = __webpack_require__(51);
+var Query            = __webpack_require__(44);
 var Util             = __webpack_require__(0);
 
 module.exports = Connection;
@@ -1197,7 +1197,7 @@ module.exports = require("child_process");
 
 var urlParse        = __webpack_require__(17).parse;
 var ClientConstants = __webpack_require__(14);
-var Charsets        = __webpack_require__(40);
+var Charsets        = __webpack_require__(41);
 var SSLProfiles     = null;
 
 module.exports = ConnectionConfig;
@@ -1628,13 +1628,13 @@ module.exports = function command (yargs, usage, validation) {
       }
       return visited
     }
-    __webpack_require__(58)({ require: req, filename: callerFile }, dir, opts)
+    __webpack_require__(59)({ require: req, filename: callerFile }, dir, opts)
   }
 
   // lookup module object from require()d command and derive name
   // if module was not require()d and no name given, throw error
   function moduleName (obj) {
-    const mod = __webpack_require__(59)(obj)
+    const mod = __webpack_require__(60)(obj)
     if (!mod) throw new Error(`No command name given for module: ${inspect(obj)}`)
     return commandFromFilename(mod.filename)
   }
@@ -1923,7 +1923,7 @@ module.exports = function (str) {
 
 var camelCase = __webpack_require__(23)
 var path = __webpack_require__(1)
-var tokenizeArgString = __webpack_require__(61)
+var tokenizeArgString = __webpack_require__(62)
 var util = __webpack_require__(0)
 
 function parse (args, opts) {
@@ -2745,7 +2745,7 @@ module.exports = function (str, pos) {
 
 "use strict";
 
-var numberIsNan = __webpack_require__(71);
+var numberIsNan = __webpack_require__(72);
 
 module.exports = function (x) {
 	if (numberIsNan(x)) {
@@ -2820,6 +2820,274 @@ webpackEmptyContext.id = 29;
 /* 30 */
 /***/ (function(module, exports, __webpack_require__) {
 
+var fs = __webpack_require__(2)
+var polyfills = __webpack_require__(89)
+var legacy = __webpack_require__(91)
+var queue = []
+
+var util = __webpack_require__(0)
+
+function noop () {}
+
+var debug = noop
+if (util.debuglog)
+  debug = util.debuglog('gfs4')
+else if (/\bgfs4\b/i.test(process.env.NODE_DEBUG || ''))
+  debug = function() {
+    var m = util.format.apply(util, arguments)
+    m = 'GFS4: ' + m.split(/\n/).join('\nGFS4: ')
+    console.error(m)
+  }
+
+if (/\bgfs4\b/i.test(process.env.NODE_DEBUG || '')) {
+  process.on('exit', function() {
+    debug(queue)
+    __webpack_require__(32).equal(queue.length, 0)
+  })
+}
+
+module.exports = patch(__webpack_require__(31))
+if (process.env.TEST_GRACEFUL_FS_GLOBAL_PATCH) {
+  module.exports = patch(fs)
+}
+
+// Always patch fs.close/closeSync, because we want to
+// retry() whenever a close happens *anywhere* in the program.
+// This is essential when multiple graceful-fs instances are
+// in play at the same time.
+module.exports.close =
+fs.close = (function (fs$close) { return function (fd, cb) {
+  return fs$close.call(fs, fd, function (err) {
+    if (!err)
+      retry()
+
+    if (typeof cb === 'function')
+      cb.apply(this, arguments)
+  })
+}})(fs.close)
+
+module.exports.closeSync =
+fs.closeSync = (function (fs$closeSync) { return function (fd) {
+  // Note that graceful-fs also retries when fs.closeSync() fails.
+  // Looks like a bug to me, although it's probably a harmless one.
+  var rval = fs$closeSync.apply(fs, arguments)
+  retry()
+  return rval
+}})(fs.closeSync)
+
+function patch (fs) {
+  // Everything that references the open() function needs to be in here
+  polyfills(fs)
+  fs.gracefulify = patch
+  fs.FileReadStream = ReadStream;  // Legacy name.
+  fs.FileWriteStream = WriteStream;  // Legacy name.
+  fs.createReadStream = createReadStream
+  fs.createWriteStream = createWriteStream
+  var fs$readFile = fs.readFile
+  fs.readFile = readFile
+  function readFile (path, options, cb) {
+    if (typeof options === 'function')
+      cb = options, options = null
+
+    return go$readFile(path, options, cb)
+
+    function go$readFile (path, options, cb) {
+      return fs$readFile(path, options, function (err) {
+        if (err && (err.code === 'EMFILE' || err.code === 'ENFILE'))
+          enqueue([go$readFile, [path, options, cb]])
+        else {
+          if (typeof cb === 'function')
+            cb.apply(this, arguments)
+          retry()
+        }
+      })
+    }
+  }
+
+  var fs$writeFile = fs.writeFile
+  fs.writeFile = writeFile
+  function writeFile (path, data, options, cb) {
+    if (typeof options === 'function')
+      cb = options, options = null
+
+    return go$writeFile(path, data, options, cb)
+
+    function go$writeFile (path, data, options, cb) {
+      return fs$writeFile(path, data, options, function (err) {
+        if (err && (err.code === 'EMFILE' || err.code === 'ENFILE'))
+          enqueue([go$writeFile, [path, data, options, cb]])
+        else {
+          if (typeof cb === 'function')
+            cb.apply(this, arguments)
+          retry()
+        }
+      })
+    }
+  }
+
+  var fs$appendFile = fs.appendFile
+  if (fs$appendFile)
+    fs.appendFile = appendFile
+  function appendFile (path, data, options, cb) {
+    if (typeof options === 'function')
+      cb = options, options = null
+
+    return go$appendFile(path, data, options, cb)
+
+    function go$appendFile (path, data, options, cb) {
+      return fs$appendFile(path, data, options, function (err) {
+        if (err && (err.code === 'EMFILE' || err.code === 'ENFILE'))
+          enqueue([go$appendFile, [path, data, options, cb]])
+        else {
+          if (typeof cb === 'function')
+            cb.apply(this, arguments)
+          retry()
+        }
+      })
+    }
+  }
+
+  var fs$readdir = fs.readdir
+  fs.readdir = readdir
+  function readdir (path, options, cb) {
+    var args = [path]
+    if (typeof options !== 'function') {
+      args.push(options)
+    } else {
+      cb = options
+    }
+    args.push(go$readdir$cb)
+
+    return go$readdir(args)
+
+    function go$readdir$cb (err, files) {
+      if (files && files.sort)
+        files.sort()
+
+      if (err && (err.code === 'EMFILE' || err.code === 'ENFILE'))
+        enqueue([go$readdir, [args]])
+      else {
+        if (typeof cb === 'function')
+          cb.apply(this, arguments)
+        retry()
+      }
+    }
+  }
+
+  function go$readdir (args) {
+    return fs$readdir.apply(fs, args)
+  }
+
+  if (process.version.substr(0, 4) === 'v0.8') {
+    var legStreams = legacy(fs)
+    ReadStream = legStreams.ReadStream
+    WriteStream = legStreams.WriteStream
+  }
+
+  var fs$ReadStream = fs.ReadStream
+  ReadStream.prototype = Object.create(fs$ReadStream.prototype)
+  ReadStream.prototype.open = ReadStream$open
+
+  var fs$WriteStream = fs.WriteStream
+  WriteStream.prototype = Object.create(fs$WriteStream.prototype)
+  WriteStream.prototype.open = WriteStream$open
+
+  fs.ReadStream = ReadStream
+  fs.WriteStream = WriteStream
+
+  function ReadStream (path, options) {
+    if (this instanceof ReadStream)
+      return fs$ReadStream.apply(this, arguments), this
+    else
+      return ReadStream.apply(Object.create(ReadStream.prototype), arguments)
+  }
+
+  function ReadStream$open () {
+    var that = this
+    open(that.path, that.flags, that.mode, function (err, fd) {
+      if (err) {
+        if (that.autoClose)
+          that.destroy()
+
+        that.emit('error', err)
+      } else {
+        that.fd = fd
+        that.emit('open', fd)
+        that.read()
+      }
+    })
+  }
+
+  function WriteStream (path, options) {
+    if (this instanceof WriteStream)
+      return fs$WriteStream.apply(this, arguments), this
+    else
+      return WriteStream.apply(Object.create(WriteStream.prototype), arguments)
+  }
+
+  function WriteStream$open () {
+    var that = this
+    open(that.path, that.flags, that.mode, function (err, fd) {
+      if (err) {
+        that.destroy()
+        that.emit('error', err)
+      } else {
+        that.fd = fd
+        that.emit('open', fd)
+      }
+    })
+  }
+
+  function createReadStream (path, options) {
+    return new ReadStream(path, options)
+  }
+
+  function createWriteStream (path, options) {
+    return new WriteStream(path, options)
+  }
+
+  var fs$open = fs.open
+  fs.open = open
+  function open (path, flags, mode, cb) {
+    if (typeof mode === 'function')
+      cb = mode, mode = null
+
+    return go$open(path, flags, mode, cb)
+
+    function go$open (path, flags, mode, cb) {
+      return fs$open(path, flags, mode, function (err, fd) {
+        if (err && (err.code === 'EMFILE' || err.code === 'ENFILE'))
+          enqueue([go$open, [path, flags, mode, cb]])
+        else {
+          if (typeof cb === 'function')
+            cb.apply(this, arguments)
+          retry()
+        }
+      })
+    }
+  }
+
+  return fs
+}
+
+function enqueue (elem) {
+  debug('ENQUEUE', elem[0].name, elem[1])
+  queue.push(elem)
+}
+
+function retry () {
+  var elem = queue.shift()
+  if (elem) {
+    debug('RETRY', elem[0].name, elem[1])
+    elem[0].apply(null, elem[1])
+  }
+}
+
+
+/***/ }),
+/* 31 */
+/***/ (function(module, exports, __webpack_require__) {
+
 "use strict";
 
 
@@ -2845,13 +3113,13 @@ function clone (obj) {
 
 
 /***/ }),
-/* 31 */
+/* 32 */
 /***/ (function(module, exports) {
 
 module.exports = require("assert");
 
 /***/ }),
-/* 32 */
+/* 33 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -2926,7 +3194,7 @@ pify.all = pify;
 
 
 /***/ }),
-/* 33 */
+/* 34 */
 /***/ (function(module, exports, __webpack_require__) {
 
 module.exports = normalize
@@ -2971,7 +3239,7 @@ function ucFirst (string) {
 
 
 /***/ }),
-/* 34 */
+/* 35 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -3046,7 +3314,7 @@ Object.keys(gitHosts).forEach(function (name) {
 
 
 /***/ }),
-/* 35 */
+/* 36 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -3054,7 +3322,7 @@ Object.keys(gitHosts).forEach(function (name) {
 
 var path = __webpack_require__(1);
 var which = __webpack_require__(121);
-var LRU = __webpack_require__(36);
+var LRU = __webpack_require__(37);
 
 var commandCache = new LRU({ max: 50, maxAge: 30 * 1000 });  // Cache just for 30sec
 
@@ -3084,7 +3352,7 @@ module.exports = resolveCommand;
 
 
 /***/ }),
-/* 36 */
+/* 37 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -3558,7 +3826,7 @@ function Entry (key, value, length, now, maxAge) {
 
 
 /***/ }),
-/* 37 */
+/* 38 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -3595,7 +3863,7 @@ module.exports = escapeArgument;
 
 
 /***/ }),
-/* 38 */
+/* 39 */
 /***/ (function(module, exports, __webpack_require__) {
 
 var Classes = Object.create(null);
@@ -3724,16 +3992,16 @@ function loadClass(className) {
       Class = __webpack_require__(19);
       break;
     case 'Pool':
-      Class = __webpack_require__(51);
+      Class = __webpack_require__(52);
       break;
     case 'PoolCluster':
       Class = __webpack_require__(199);
       break;
     case 'PoolConfig':
-      Class = __webpack_require__(52);
+      Class = __webpack_require__(53);
       break;
     case 'SqlString':
-      Class = __webpack_require__(50);
+      Class = __webpack_require__(51);
       break;
     case 'Types':
       Class = __webpack_require__(20);
@@ -3750,13 +4018,13 @@ function loadClass(className) {
 
 
 /***/ }),
-/* 39 */
+/* 40 */
 /***/ (function(module, exports) {
 
 module.exports = require("crypto");
 
 /***/ }),
-/* 40 */
+/* 41 */
 /***/ (function(module, exports) {
 
 exports.BIG5_CHINESE_CI              = 1;
@@ -4024,7 +4292,7 @@ exports.UTF32    = exports.UTF32_GENERAL_CI;
 
 
 /***/ }),
-/* 41 */
+/* 42 */
 /***/ (function(module, exports, __webpack_require__) {
 
 var Types = __webpack_require__(20);
@@ -4064,11 +4332,11 @@ function typeToString(t) {
 
 
 /***/ }),
-/* 42 */
+/* 43 */
 /***/ (function(module, exports, __webpack_require__) {
 
 var Buffer = __webpack_require__(3).Buffer;
-var Crypto = __webpack_require__(39);
+var Crypto = __webpack_require__(40);
 var Auth   = exports;
 
 function sha1(msg) {
@@ -4222,7 +4490,7 @@ Auth.int32Read = function(buffer, offset){
 
 
 /***/ }),
-/* 43 */
+/* 44 */
 /***/ (function(module, exports, __webpack_require__) {
 
 var Sequence     = __webpack_require__(6);
@@ -4446,7 +4714,7 @@ Query.prototype.stream = function(options) {
 
 
 /***/ }),
-/* 44 */
+/* 45 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -4499,7 +4767,7 @@ var EElistenerCount = function (emitter, type) {
 /*</replacement>*/
 
 /*<replacement>*/
-var Stream = __webpack_require__(45);
+var Stream = __webpack_require__(46);
 /*</replacement>*/
 
 // TODO(bmeurer): Change this back to const once hole checks are
@@ -4531,7 +4799,7 @@ if (debugUtil && debugUtil.debuglog) {
 /*</replacement>*/
 
 var BufferList = __webpack_require__(189);
-var destroyImpl = __webpack_require__(46);
+var destroyImpl = __webpack_require__(47);
 var StringDecoder;
 
 util.inherits(Readable, Stream);
@@ -4614,7 +4882,7 @@ function ReadableState(options, stream) {
   this.decoder = null;
   this.encoding = null;
   if (options.encoding) {
-    if (!StringDecoder) StringDecoder = __webpack_require__(48).StringDecoder;
+    if (!StringDecoder) StringDecoder = __webpack_require__(49).StringDecoder;
     this.decoder = new StringDecoder(options.encoding);
     this.encoding = options.encoding;
   }
@@ -4770,7 +5038,7 @@ Readable.prototype.isPaused = function () {
 
 // backwards compatibility.
 Readable.prototype.setEncoding = function (enc) {
-  if (!StringDecoder) StringDecoder = __webpack_require__(48).StringDecoder;
+  if (!StringDecoder) StringDecoder = __webpack_require__(49).StringDecoder;
   this._readableState.decoder = new StringDecoder(enc);
   this._readableState.encoding = enc;
   return this;
@@ -5459,14 +5727,14 @@ function indexOf(xs, x) {
 }
 
 /***/ }),
-/* 45 */
+/* 46 */
 /***/ (function(module, exports, __webpack_require__) {
 
 module.exports = __webpack_require__(8);
 
 
 /***/ }),
-/* 46 */
+/* 47 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -5544,7 +5812,7 @@ module.exports = {
 };
 
 /***/ }),
-/* 47 */
+/* 48 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -5625,7 +5893,7 @@ var internalUtil = {
 /*</replacement>*/
 
 /*<replacement>*/
-var Stream = __webpack_require__(45);
+var Stream = __webpack_require__(46);
 /*</replacement>*/
 
 /*<replacement>*/
@@ -5639,7 +5907,7 @@ function _isUint8Array(obj) {
 }
 /*</replacement>*/
 
-var destroyImpl = __webpack_require__(46);
+var destroyImpl = __webpack_require__(47);
 
 util.inherits(Writable, Stream);
 
@@ -6214,7 +6482,7 @@ Writable.prototype._destroy = function (err, cb) {
 };
 
 /***/ }),
-/* 48 */
+/* 49 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -6492,7 +6760,7 @@ function simpleEnd(buf) {
 }
 
 /***/ }),
-/* 49 */
+/* 50 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -6712,17 +6980,17 @@ function done(stream, er, data) {
 }
 
 /***/ }),
-/* 50 */
+/* 51 */
 /***/ (function(module, exports, __webpack_require__) {
 
 module.exports = __webpack_require__(196);
 
 
 /***/ }),
-/* 51 */
+/* 52 */
 /***/ (function(module, exports, __webpack_require__) {
 
-var mysql          = __webpack_require__(38);
+var mysql          = __webpack_require__(39);
 var Connection     = __webpack_require__(13);
 var EventEmitter   = __webpack_require__(5).EventEmitter;
 var Util           = __webpack_require__(0);
@@ -7019,7 +7287,7 @@ function spliceConnection(array, connection) {
 
 
 /***/ }),
-/* 52 */
+/* 53 */
 /***/ (function(module, exports, __webpack_require__) {
 
 
@@ -7057,7 +7325,7 @@ PoolConfig.prototype.newConnectionConfig = function newConnectionConfig() {
 
 
 /***/ }),
-/* 53 */
+/* 54 */
 /***/ (function(module, exports) {
 
 
@@ -7094,26 +7362,35 @@ PoolSelector.ORDER = function PoolSelectorOrder() {
 
 
 /***/ }),
-/* 54 */
+/* 55 */
 /***/ (function(module, exports) {
 
-module.exports = {"business_domain":"https://empresas-10-1-110-15.habssl.net/dev.php/pro/","habitissimo_db":{"name":"default","user":"root","pass":"secret","host":"10.1.20.213","port":56700},"command_args":{"business":{"simple":["id","user_id","bsubcategory_id","name","normalized_name","email","tax_id","quality_index","business_status","membership"],"complexed":["with_spcd"]}}}
+module.exports = {"business_domain":"https://empresas-10-1-110-15.habssl.net/dev.php/pro/","browser":"google-chrome","habitissimo_db":{"name":"default","user":"root","pass":"secret","host":"10.1.20.213","port":56700},"command_args":{"business":{"simple":["id","user_id","bsubcategory_id","name","normalized_name","email","tax_id","quality_index","business_status","membership"],"complexed":["with_spcd"]}}}
 
 /***/ }),
-/* 55 */
+/* 56 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
 
 
-var _commandLine = __webpack_require__(56);
+var _commandLine = __webpack_require__(57);
 
 var _database = __webpack_require__(150);
 
-var config = __webpack_require__(54);
-var business_domain = config.business_domain;
+var jsonfile = __webpack_require__(201);
+var opn = __webpack_require__(202);
+var path = __webpack_require__(1);
 
-var opn = __webpack_require__(201);
+var home = process.env['HOME'];
+var config_path = path.join(home, '/.config/supplanter/confi.json');
+
+var config = jsonfile.readFileSync(config_path, { throws: false });
+
+if (!config) {
+  config = __webpack_require__(55);
+  jsonfile.writeFileSync(config_path, config, { spaces: 2, EOL: '\r\n' });
+}
 
 var params = (0, _commandLine.getCommandLine)();
 
@@ -7123,7 +7400,7 @@ if (params.hab_type === 'business') {
     var normalized_name = (0, _database.executeQuery)(query);
 
     normalized_name.then(function (params) {
-      opn(business_domain + params, { app: 'google-chrome' }).catch(function (err) {
+      opn(config.business_domain + params, { app: 'google-chrome' }).catch(function (err) {
         return console.log(err);
       });
     }).catch(function (err) {
@@ -7133,7 +7410,7 @@ if (params.hab_type === 'business') {
 }
 
 /***/ }),
-/* 56 */
+/* 57 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -7143,7 +7420,7 @@ Object.defineProperty(exports, "__esModule", {
   value: true
 });
 exports.getCommandLine = getCommandLine;
-var yargs = __webpack_require__(57),
+var yargs = __webpack_require__(58),
     parser = __webpack_require__(24);
 
 function getCommandLine() {
@@ -7169,22 +7446,22 @@ function getCommandLine() {
 }
 
 /***/ }),
-/* 57 */
+/* 58 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
 /* WEBPACK VAR INJECTION */(function(__dirname) {
 const argsert = __webpack_require__(21)
 const Command = __webpack_require__(22)
-const Completion = __webpack_require__(60)
+const Completion = __webpack_require__(61)
 const Parser = __webpack_require__(24)
 const path = __webpack_require__(1)
-const Usage = __webpack_require__(63)
-const Validation = __webpack_require__(75)
-const Y18n = __webpack_require__(77)
+const Usage = __webpack_require__(64)
+const Validation = __webpack_require__(76)
+const Y18n = __webpack_require__(78)
 const objFilter = __webpack_require__(16)
 const setBlocking = __webpack_require__(25)
-const applyExtends = __webpack_require__(78)
+const applyExtends = __webpack_require__(79)
 const YError = __webpack_require__(11)
 
 exports = module.exports = Yargs
@@ -7521,7 +7798,7 @@ function Yargs (processArgs, cwd, parentRequire) {
   self.commandDir = function (dir, opts) {
     argsert('<string> [object]', [dir, opts], arguments.length)
     const req = parentRequire || !(function webpackMissingModule() { var e = new Error("Cannot find module \".\""); e.code = 'MODULE_NOT_FOUND'; throw e; }())
-    command.addDirectory(dir, self.getContext(), req, __webpack_require__(79)(), opts)
+    command.addDirectory(dir, self.getContext(), req, __webpack_require__(80)(), opts)
     return self
   }
 
@@ -7669,7 +7946,7 @@ function Yargs (processArgs, cwd, parentRequire) {
   function pkgUp (path) {
     const npath = path || '*'
     if (pkgs[npath]) return pkgs[npath]
-    const readPkgUp = __webpack_require__(80)
+    const readPkgUp = __webpack_require__(81)
 
     let obj = {}
     try {
@@ -8287,7 +8564,7 @@ function rebase (base, dir) {
 /* WEBPACK VAR INJECTION */}.call(exports, "/"))
 
 /***/ }),
-/* 58 */
+/* 59 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -8380,7 +8657,7 @@ module.exports.defaults = defaultOptions;
 
 
 /***/ }),
-/* 59 */
+/* 60 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -8396,7 +8673,7 @@ module.exports = function whichModule (exported) {
 
 
 /***/ }),
-/* 60 */
+/* 61 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -8508,7 +8785,7 @@ module.exports = function completion (yargs, usage, command) {
 /* WEBPACK VAR INJECTION */}.call(exports, "/"))
 
 /***/ }),
-/* 61 */
+/* 62 */
 /***/ (function(module, exports) {
 
 // take an un-split argv string and tokenize it.
@@ -8548,7 +8825,7 @@ module.exports = function (argString) {
 
 
 /***/ }),
-/* 62 */
+/* 63 */
 /***/ (function(module, exports) {
 
 function webpackEmptyContext(req) {
@@ -8557,17 +8834,17 @@ function webpackEmptyContext(req) {
 webpackEmptyContext.keys = function() { return []; };
 webpackEmptyContext.resolve = webpackEmptyContext;
 module.exports = webpackEmptyContext;
-webpackEmptyContext.id = 62;
+webpackEmptyContext.id = 63;
 
 /***/ }),
-/* 63 */
+/* 64 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
 
 // this file handles outputting usage instructions,
 // failures, etc. keeps logging in one place.
-const stringWidth = __webpack_require__(64)
+const stringWidth = __webpack_require__(65)
 const objFilter = __webpack_require__(16)
 const setBlocking = __webpack_require__(25)
 const YError = __webpack_require__(11)
@@ -8711,7 +8988,7 @@ module.exports = function usage (yargs, y18n) {
     )
 
     const theWrap = getWrap()
-    const ui = __webpack_require__(68)({
+    const ui = __webpack_require__(69)({
       width: theWrap,
       wrap: !!theWrap
     })
@@ -8931,7 +9208,7 @@ module.exports = function usage (yargs, y18n) {
   }
 
   self.functionDescription = (fn) => {
-    const description = fn.name ? __webpack_require__(74)(fn.name, '-') : __('generated-value')
+    const description = fn.name ? __webpack_require__(75)(fn.name, '-') : __('generated-value')
     return ['(', description, ')'].join('')
   }
 
@@ -9036,13 +9313,13 @@ module.exports = function usage (yargs, y18n) {
 
 
 /***/ }),
-/* 64 */
+/* 65 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
 
-const stripAnsi = __webpack_require__(65);
-const isFullwidthCodePoint = __webpack_require__(67);
+const stripAnsi = __webpack_require__(66);
+const isFullwidthCodePoint = __webpack_require__(68);
 
 module.exports = str => {
 	if (typeof str !== 'string' || str.length === 0) {
@@ -9079,18 +9356,18 @@ module.exports = str => {
 
 
 /***/ }),
-/* 65 */
+/* 66 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
 
-const ansiRegex = __webpack_require__(66);
+const ansiRegex = __webpack_require__(67);
 
 module.exports = input => typeof input === 'string' ? input.replace(ansiRegex(), '') : input;
 
 
 /***/ }),
-/* 66 */
+/* 67 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -9107,7 +9384,7 @@ module.exports = () => {
 
 
 /***/ }),
-/* 67 */
+/* 68 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -9160,12 +9437,12 @@ module.exports = x => {
 
 
 /***/ }),
-/* 68 */
+/* 69 */
 /***/ (function(module, exports, __webpack_require__) {
 
-var stringWidth = __webpack_require__(69)
+var stringWidth = __webpack_require__(70)
 var stripAnsi = __webpack_require__(12)
-var wrap = __webpack_require__(72)
+var wrap = __webpack_require__(73)
 var align = {
   right: alignRight,
   center: alignCenter
@@ -9482,7 +9759,7 @@ module.exports = function (opts) {
 
 
 /***/ }),
-/* 69 */
+/* 70 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -9526,7 +9803,7 @@ module.exports = function (str) {
 
 
 /***/ }),
-/* 70 */
+/* 71 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -9537,7 +9814,7 @@ module.exports = function () {
 
 
 /***/ }),
-/* 71 */
+/* 72 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -9548,12 +9825,12 @@ module.exports = Number.isNaN || function (x) {
 
 
 /***/ }),
-/* 72 */
+/* 73 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
 
-var stringWidth = __webpack_require__(73);
+var stringWidth = __webpack_require__(74);
 var stripAnsi = __webpack_require__(12);
 
 var ESCAPES = [
@@ -9723,7 +10000,7 @@ module.exports = function (str, cols, opts) {
 
 
 /***/ }),
-/* 73 */
+/* 74 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -9767,7 +10044,7 @@ module.exports = function (str) {
 
 
 /***/ }),
-/* 74 */
+/* 75 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -9787,7 +10064,7 @@ module.exports = function (str, sep) {
 
 
 /***/ }),
-/* 75 */
+/* 76 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -10125,7 +10402,7 @@ module.exports = function validation (yargs, usage, y18n) {
   }
 
   self.recommendCommands = function recommendCommands (cmd, potentialCommands) {
-    const distance = __webpack_require__(76)
+    const distance = __webpack_require__(77)
     const threshold = 3 // if it takes more than three edits, let's move on.
     potentialCommands = potentialCommands.sort((a, b) => b.length - a.length)
 
@@ -10167,7 +10444,7 @@ module.exports = function validation (yargs, usage, y18n) {
 
 
 /***/ }),
-/* 76 */
+/* 77 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -10221,7 +10498,7 @@ module.exports = function levenshtein (a, b) {
 
 
 /***/ }),
-/* 77 */
+/* 78 */
 /***/ (function(module, exports, __webpack_require__) {
 
 var fs = __webpack_require__(2)
@@ -10399,7 +10676,7 @@ module.exports = function (opts) {
 
 
 /***/ }),
-/* 78 */
+/* 79 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -10459,7 +10736,7 @@ module.exports = applyExtends
 
 
 /***/ }),
-/* 79 */
+/* 80 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -10486,13 +10763,13 @@ module.exports = function getCallerFile(_position) {
 
 
 /***/ }),
-/* 80 */
+/* 81 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
 
-const findUp = __webpack_require__(81);
-const readPkg = __webpack_require__(86);
+const findUp = __webpack_require__(82);
+const readPkg = __webpack_require__(87);
 
 module.exports = opts => {
 	return findUp('package.json', opts).then(fp => {
@@ -10519,13 +10796,13 @@ module.exports.sync = opts => {
 
 
 /***/ }),
-/* 81 */
+/* 82 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
 
 const path = __webpack_require__(1);
-const locatePath = __webpack_require__(82);
+const locatePath = __webpack_require__(83);
 
 module.exports = (filename, opts) => {
 	opts = opts || {};
@@ -10574,14 +10851,14 @@ module.exports.sync = (filename, opts) => {
 
 
 /***/ }),
-/* 82 */
+/* 83 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
 
 const path = __webpack_require__(1);
-const pathExists = __webpack_require__(83);
-const pLocate = __webpack_require__(84);
+const pathExists = __webpack_require__(84);
+const pLocate = __webpack_require__(85);
 
 module.exports = (iterable, opts) => {
 	opts = Object.assign({
@@ -10605,7 +10882,7 @@ module.exports.sync = (iterable, opts) => {
 
 
 /***/ }),
-/* 83 */
+/* 84 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -10629,12 +10906,12 @@ module.exports.sync = fp => {
 
 
 /***/ }),
-/* 84 */
+/* 85 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
 
-const pLimit = __webpack_require__(85);
+const pLimit = __webpack_require__(86);
 
 class EndError extends Error {
 	constructor(value) {
@@ -10667,7 +10944,7 @@ module.exports = (iterable, tester, opts) => {
 
 
 /***/ }),
-/* 85 */
+/* 86 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -10714,13 +10991,13 @@ module.exports = concurrency => {
 
 
 /***/ }),
-/* 86 */
+/* 87 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
 
 const path = __webpack_require__(1);
-const loadJsonFile = __webpack_require__(87);
+const loadJsonFile = __webpack_require__(88);
 const pathType = __webpack_require__(98);
 
 module.exports = (fp, opts) => {
@@ -10741,7 +11018,7 @@ module.exports = (fp, opts) => {
 		})
 		.then(x => {
 			if (opts.normalize !== false) {
-				__webpack_require__(33)(x);
+				__webpack_require__(34)(x);
 			}
 
 			return x;
@@ -10760,7 +11037,7 @@ module.exports.sync = (fp, opts) => {
 	const x = loadJsonFile.sync(fp);
 
 	if (opts.normalize !== false) {
-		__webpack_require__(33)(x);
+		__webpack_require__(34)(x);
 	}
 
 	return x;
@@ -10768,16 +11045,16 @@ module.exports.sync = (fp, opts) => {
 
 
 /***/ }),
-/* 87 */
+/* 88 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
 
 const path = __webpack_require__(1);
-const fs = __webpack_require__(88);
+const fs = __webpack_require__(30);
 const stripBom = __webpack_require__(92);
 const parseJson = __webpack_require__(93);
-const pify = __webpack_require__(32);
+const pify = __webpack_require__(33);
 
 const parse = (data, fp) => parseJson(stripBom(data), path.relative('.', fp));
 
@@ -10786,278 +11063,10 @@ module.exports.sync = fp => parse(fs.readFileSync(fp, 'utf8'), fp);
 
 
 /***/ }),
-/* 88 */
-/***/ (function(module, exports, __webpack_require__) {
-
-var fs = __webpack_require__(2)
-var polyfills = __webpack_require__(89)
-var legacy = __webpack_require__(91)
-var queue = []
-
-var util = __webpack_require__(0)
-
-function noop () {}
-
-var debug = noop
-if (util.debuglog)
-  debug = util.debuglog('gfs4')
-else if (/\bgfs4\b/i.test(process.env.NODE_DEBUG || ''))
-  debug = function() {
-    var m = util.format.apply(util, arguments)
-    m = 'GFS4: ' + m.split(/\n/).join('\nGFS4: ')
-    console.error(m)
-  }
-
-if (/\bgfs4\b/i.test(process.env.NODE_DEBUG || '')) {
-  process.on('exit', function() {
-    debug(queue)
-    __webpack_require__(31).equal(queue.length, 0)
-  })
-}
-
-module.exports = patch(__webpack_require__(30))
-if (process.env.TEST_GRACEFUL_FS_GLOBAL_PATCH) {
-  module.exports = patch(fs)
-}
-
-// Always patch fs.close/closeSync, because we want to
-// retry() whenever a close happens *anywhere* in the program.
-// This is essential when multiple graceful-fs instances are
-// in play at the same time.
-module.exports.close =
-fs.close = (function (fs$close) { return function (fd, cb) {
-  return fs$close.call(fs, fd, function (err) {
-    if (!err)
-      retry()
-
-    if (typeof cb === 'function')
-      cb.apply(this, arguments)
-  })
-}})(fs.close)
-
-module.exports.closeSync =
-fs.closeSync = (function (fs$closeSync) { return function (fd) {
-  // Note that graceful-fs also retries when fs.closeSync() fails.
-  // Looks like a bug to me, although it's probably a harmless one.
-  var rval = fs$closeSync.apply(fs, arguments)
-  retry()
-  return rval
-}})(fs.closeSync)
-
-function patch (fs) {
-  // Everything that references the open() function needs to be in here
-  polyfills(fs)
-  fs.gracefulify = patch
-  fs.FileReadStream = ReadStream;  // Legacy name.
-  fs.FileWriteStream = WriteStream;  // Legacy name.
-  fs.createReadStream = createReadStream
-  fs.createWriteStream = createWriteStream
-  var fs$readFile = fs.readFile
-  fs.readFile = readFile
-  function readFile (path, options, cb) {
-    if (typeof options === 'function')
-      cb = options, options = null
-
-    return go$readFile(path, options, cb)
-
-    function go$readFile (path, options, cb) {
-      return fs$readFile(path, options, function (err) {
-        if (err && (err.code === 'EMFILE' || err.code === 'ENFILE'))
-          enqueue([go$readFile, [path, options, cb]])
-        else {
-          if (typeof cb === 'function')
-            cb.apply(this, arguments)
-          retry()
-        }
-      })
-    }
-  }
-
-  var fs$writeFile = fs.writeFile
-  fs.writeFile = writeFile
-  function writeFile (path, data, options, cb) {
-    if (typeof options === 'function')
-      cb = options, options = null
-
-    return go$writeFile(path, data, options, cb)
-
-    function go$writeFile (path, data, options, cb) {
-      return fs$writeFile(path, data, options, function (err) {
-        if (err && (err.code === 'EMFILE' || err.code === 'ENFILE'))
-          enqueue([go$writeFile, [path, data, options, cb]])
-        else {
-          if (typeof cb === 'function')
-            cb.apply(this, arguments)
-          retry()
-        }
-      })
-    }
-  }
-
-  var fs$appendFile = fs.appendFile
-  if (fs$appendFile)
-    fs.appendFile = appendFile
-  function appendFile (path, data, options, cb) {
-    if (typeof options === 'function')
-      cb = options, options = null
-
-    return go$appendFile(path, data, options, cb)
-
-    function go$appendFile (path, data, options, cb) {
-      return fs$appendFile(path, data, options, function (err) {
-        if (err && (err.code === 'EMFILE' || err.code === 'ENFILE'))
-          enqueue([go$appendFile, [path, data, options, cb]])
-        else {
-          if (typeof cb === 'function')
-            cb.apply(this, arguments)
-          retry()
-        }
-      })
-    }
-  }
-
-  var fs$readdir = fs.readdir
-  fs.readdir = readdir
-  function readdir (path, options, cb) {
-    var args = [path]
-    if (typeof options !== 'function') {
-      args.push(options)
-    } else {
-      cb = options
-    }
-    args.push(go$readdir$cb)
-
-    return go$readdir(args)
-
-    function go$readdir$cb (err, files) {
-      if (files && files.sort)
-        files.sort()
-
-      if (err && (err.code === 'EMFILE' || err.code === 'ENFILE'))
-        enqueue([go$readdir, [args]])
-      else {
-        if (typeof cb === 'function')
-          cb.apply(this, arguments)
-        retry()
-      }
-    }
-  }
-
-  function go$readdir (args) {
-    return fs$readdir.apply(fs, args)
-  }
-
-  if (process.version.substr(0, 4) === 'v0.8') {
-    var legStreams = legacy(fs)
-    ReadStream = legStreams.ReadStream
-    WriteStream = legStreams.WriteStream
-  }
-
-  var fs$ReadStream = fs.ReadStream
-  ReadStream.prototype = Object.create(fs$ReadStream.prototype)
-  ReadStream.prototype.open = ReadStream$open
-
-  var fs$WriteStream = fs.WriteStream
-  WriteStream.prototype = Object.create(fs$WriteStream.prototype)
-  WriteStream.prototype.open = WriteStream$open
-
-  fs.ReadStream = ReadStream
-  fs.WriteStream = WriteStream
-
-  function ReadStream (path, options) {
-    if (this instanceof ReadStream)
-      return fs$ReadStream.apply(this, arguments), this
-    else
-      return ReadStream.apply(Object.create(ReadStream.prototype), arguments)
-  }
-
-  function ReadStream$open () {
-    var that = this
-    open(that.path, that.flags, that.mode, function (err, fd) {
-      if (err) {
-        if (that.autoClose)
-          that.destroy()
-
-        that.emit('error', err)
-      } else {
-        that.fd = fd
-        that.emit('open', fd)
-        that.read()
-      }
-    })
-  }
-
-  function WriteStream (path, options) {
-    if (this instanceof WriteStream)
-      return fs$WriteStream.apply(this, arguments), this
-    else
-      return WriteStream.apply(Object.create(WriteStream.prototype), arguments)
-  }
-
-  function WriteStream$open () {
-    var that = this
-    open(that.path, that.flags, that.mode, function (err, fd) {
-      if (err) {
-        that.destroy()
-        that.emit('error', err)
-      } else {
-        that.fd = fd
-        that.emit('open', fd)
-      }
-    })
-  }
-
-  function createReadStream (path, options) {
-    return new ReadStream(path, options)
-  }
-
-  function createWriteStream (path, options) {
-    return new WriteStream(path, options)
-  }
-
-  var fs$open = fs.open
-  fs.open = open
-  function open (path, flags, mode, cb) {
-    if (typeof mode === 'function')
-      cb = mode, mode = null
-
-    return go$open(path, flags, mode, cb)
-
-    function go$open (path, flags, mode, cb) {
-      return fs$open(path, flags, mode, function (err, fd) {
-        if (err && (err.code === 'EMFILE' || err.code === 'ENFILE'))
-          enqueue([go$open, [path, flags, mode, cb]])
-        else {
-          if (typeof cb === 'function')
-            cb.apply(this, arguments)
-          retry()
-        }
-      })
-    }
-  }
-
-  return fs
-}
-
-function enqueue (elem) {
-  debug('ENQUEUE', elem[0].name, elem[1])
-  queue.push(elem)
-}
-
-function retry () {
-  var elem = queue.shift()
-  if (elem) {
-    debug('RETRY', elem[0].name, elem[1])
-    elem[0].apply(null, elem[1])
-  }
-}
-
-
-/***/ }),
 /* 89 */
 /***/ (function(module, exports, __webpack_require__) {
 
-var fs = __webpack_require__(30)
+var fs = __webpack_require__(31)
 var constants = __webpack_require__(90)
 
 var origCwd = process.cwd
@@ -12581,7 +12590,7 @@ module.exports.NonAsciiIdentifierPart = /[\xAA\xB5\xBA\xC0-\xD6\xD8-\xF6\xF8-\u0
 "use strict";
 
 const fs = __webpack_require__(2);
-const pify = __webpack_require__(32);
+const pify = __webpack_require__(33);
 
 function type(fn, fn2, fp) {
 	if (typeof fp !== 'string') {
@@ -16081,7 +16090,7 @@ module.exports = ["Glide","Abstyles","AFL-1.1","AFL-1.2","AFL-2.0","AFL-2.1","AF
 "use strict";
 
 var url = __webpack_require__(17)
-var gitHosts = __webpack_require__(34)
+var gitHosts = __webpack_require__(35)
 var GitHost = module.exports = __webpack_require__(108)
 
 var protocolToRepresentationMap = {
@@ -16208,7 +16217,7 @@ function parseGitUrl (giturl) {
 
 "use strict";
 
-var gitHosts = __webpack_require__(34)
+var gitHosts = __webpack_require__(35)
 var extend = Object.assign || __webpack_require__(0)._extend
 
 var GitHost = module.exports = function (type, user, auth, project, committish, defaultRepresentation, opts) {
@@ -16951,9 +16960,9 @@ module.exports._enoent = enoent;
 "use strict";
 
 
-var resolveCommand = __webpack_require__(35);
+var resolveCommand = __webpack_require__(36);
 var hasEmptyArgumentBug = __webpack_require__(128);
-var escapeArgument = __webpack_require__(37);
+var escapeArgument = __webpack_require__(38);
 var escapeCommand = __webpack_require__(129);
 var readShebang = __webpack_require__(130);
 
@@ -17905,7 +17914,7 @@ module.exports = hasEmptyArgumentBug();
 "use strict";
 
 
-var escapeArgument = __webpack_require__(37);
+var escapeArgument = __webpack_require__(38);
 
 function escapeCommand(command) {
     // Do not escape if this command is not dangerous..
@@ -17925,7 +17934,7 @@ module.exports = escapeCommand;
 
 
 var fs = __webpack_require__(2);
-var LRU = __webpack_require__(36);
+var LRU = __webpack_require__(37);
 var shebangCommand = __webpack_require__(131);
 
 var shebangCache = new LRU({ max: 50, maxAge: 30 * 1000 });  // Cache just for 30sec
@@ -18004,7 +18013,7 @@ module.exports = /^#!.*/;
 
 
 var isWin = process.platform === 'win32';
-var resolveCommand = __webpack_require__(35);
+var resolveCommand = __webpack_require__(36);
 
 var isNode10 = process.version.indexOf('v0.10.') === 0;
 
@@ -18337,7 +18346,7 @@ module.exports = (promise, onFinally) => {
 // Note: since nyc uses this module to output coverage, any lines
 // that are in the direct sync flow of nyc's outputCoverage are
 // ignored, since we can never get coverage for them.
-var assert = __webpack_require__(31)
+var assert = __webpack_require__(32)
 var signals = __webpack_require__(142)
 
 var EE = __webpack_require__(5)
@@ -18789,8 +18798,8 @@ Object.defineProperty(exports, "__esModule", {
 });
 exports.executeQuery = executeQuery;
 exports.getQuery = getQuery;
-var mysql = __webpack_require__(38),
-    config = __webpack_require__(54);
+var mysql = __webpack_require__(39),
+    config = __webpack_require__(55);
 
 var db_config = config.habitissimo_db,
     business_complexed = config.command_args.business.complexed;
@@ -23096,7 +23105,7 @@ BufferList.prototype.push = function push(buf) {
 exports.ChangeUser = __webpack_require__(161);
 exports.Handshake = __webpack_require__(182);
 exports.Ping = __webpack_require__(183);
-exports.Query = __webpack_require__(43);
+exports.Query = __webpack_require__(44);
 exports.Quit = __webpack_require__(192);
 exports.Sequence = __webpack_require__(6);
 exports.Statistics = __webpack_require__(193);
@@ -23109,7 +23118,7 @@ exports.Statistics = __webpack_require__(193);
 var Sequence = __webpack_require__(6);
 var Util     = __webpack_require__(0);
 var Packets  = __webpack_require__(4);
-var Auth     = __webpack_require__(42);
+var Auth     = __webpack_require__(43);
 
 module.exports = ChangeUser;
 Util.inherits(ChangeUser, Sequence);
@@ -23733,8 +23742,8 @@ ResultSetHeaderPacket.prototype.write = function(writer) {
 /***/ (function(module, exports, __webpack_require__) {
 
 var Types                        = __webpack_require__(20);
-var Charsets                     = __webpack_require__(40);
-var Field                        = __webpack_require__(41);
+var Charsets                     = __webpack_require__(41);
+var Field                        = __webpack_require__(42);
 var IEEE_754_BINARY_64_PRECISION = Math.pow(2, 53);
 
 module.exports = RowDataPacket;
@@ -26357,7 +26366,7 @@ exports[3194] = 'ER_PARTITION_ENGINE_DEPRECATED_FOR_TABLE';
 var Sequence        = __webpack_require__(6);
 var Util            = __webpack_require__(0);
 var Packets         = __webpack_require__(4);
-var Auth            = __webpack_require__(42);
+var Auth            = __webpack_require__(43);
 var ClientConstants = __webpack_require__(14);
 
 module.exports = Handshake;
@@ -26560,12 +26569,12 @@ if (process.env.READABLE_STREAM === 'disable' && Stream) {
   exports.PassThrough = Stream.PassThrough;
   exports.Stream = Stream;
 } else {
-  exports = module.exports = __webpack_require__(44);
+  exports = module.exports = __webpack_require__(45);
   exports.Stream = Stream || exports;
   exports.Readable = exports;
-  exports.Writable = __webpack_require__(47);
+  exports.Writable = __webpack_require__(48);
   exports.Duplex = __webpack_require__(7);
-  exports.Transform = __webpack_require__(49);
+  exports.Transform = __webpack_require__(50);
   exports.PassThrough = __webpack_require__(191);
 }
 
@@ -26736,7 +26745,7 @@ module.exports = __webpack_require__(0).deprecate;
 
 module.exports = PassThrough;
 
-var Transform = __webpack_require__(49);
+var Transform = __webpack_require__(50);
 
 /*<replacement>*/
 var util = __webpack_require__(9);
@@ -27344,10 +27353,10 @@ PoolConnection.prototype._removeFromPool = function _removeFromPool() {
 /* 199 */
 /***/ (function(module, exports, __webpack_require__) {
 
-var Pool          = __webpack_require__(51);
-var PoolConfig    = __webpack_require__(52);
+var Pool          = __webpack_require__(52);
+var PoolConfig    = __webpack_require__(53);
 var PoolNamespace = __webpack_require__(200);
-var PoolSelector  = __webpack_require__(53);
+var PoolSelector  = __webpack_require__(54);
 var Util          = __webpack_require__(0);
 var EventEmitter  = __webpack_require__(5).EventEmitter;
 
@@ -27639,7 +27648,7 @@ function _noop() {}
 /***/ (function(module, exports, __webpack_require__) {
 
 var Connection   = __webpack_require__(13);
-var PoolSelector = __webpack_require__(53);
+var PoolSelector = __webpack_require__(54);
 
 module.exports = PoolNamespace;
 
@@ -27780,11 +27789,151 @@ PoolNamespace.prototype._getClusterNode = function _getClusterNode() {
 /* 201 */
 /***/ (function(module, exports, __webpack_require__) {
 
+var _fs
+try {
+  _fs = __webpack_require__(30)
+} catch (_) {
+  _fs = __webpack_require__(2)
+}
+
+function readFile (file, options, callback) {
+  if (callback == null) {
+    callback = options
+    options = {}
+  }
+
+  if (typeof options === 'string') {
+    options = {encoding: options}
+  }
+
+  options = options || {}
+  var fs = options.fs || _fs
+
+  var shouldThrow = true
+  if ('throws' in options) {
+    shouldThrow = options.throws
+  }
+
+  fs.readFile(file, options, function (err, data) {
+    if (err) return callback(err)
+
+    data = stripBom(data)
+
+    var obj
+    try {
+      obj = JSON.parse(data, options ? options.reviver : null)
+    } catch (err2) {
+      if (shouldThrow) {
+        err2.message = file + ': ' + err2.message
+        return callback(err2)
+      } else {
+        return callback(null, null)
+      }
+    }
+
+    callback(null, obj)
+  })
+}
+
+function readFileSync (file, options) {
+  options = options || {}
+  if (typeof options === 'string') {
+    options = {encoding: options}
+  }
+
+  var fs = options.fs || _fs
+
+  var shouldThrow = true
+  if ('throws' in options) {
+    shouldThrow = options.throws
+  }
+
+  try {
+    var content = fs.readFileSync(file, options)
+    content = stripBom(content)
+    return JSON.parse(content, options.reviver)
+  } catch (err) {
+    if (shouldThrow) {
+      err.message = file + ': ' + err.message
+      throw err
+    } else {
+      return null
+    }
+  }
+}
+
+function stringify (obj, options) {
+  var spaces
+  var EOL = '\n'
+  if (typeof options === 'object' && options !== null) {
+    if (options.spaces) {
+      spaces = options.spaces
+    }
+    if (options.EOL) {
+      EOL = options.EOL
+    }
+  }
+
+  var str = JSON.stringify(obj, options ? options.replacer : null, spaces)
+
+  return str.replace(/\n/g, EOL) + EOL
+}
+
+function writeFile (file, obj, options, callback) {
+  if (callback == null) {
+    callback = options
+    options = {}
+  }
+  options = options || {}
+  var fs = options.fs || _fs
+
+  var str = ''
+  try {
+    str = stringify(obj, options)
+  } catch (err) {
+    // Need to return whether a callback was passed or not
+    if (callback) callback(err, null)
+    return
+  }
+
+  fs.writeFile(file, str, options, callback)
+}
+
+function writeFileSync (file, obj, options) {
+  options = options || {}
+  var fs = options.fs || _fs
+
+  var str = stringify(obj, options)
+  // not sure if fs.writeFileSync returns anything, but just in case
+  return fs.writeFileSync(file, str, options)
+}
+
+function stripBom (content) {
+  // we do this because JSON.parse would convert it to a utf8 string if encoding wasn't specified
+  if (Buffer.isBuffer(content)) content = content.toString('utf8')
+  content = content.replace(/^\uFEFF/, '')
+  return content
+}
+
+var jsonfile = {
+  readFile: readFile,
+  readFileSync: readFileSync,
+  writeFile: writeFile,
+  writeFileSync: writeFileSync
+}
+
+module.exports = jsonfile
+
+
+/***/ }),
+/* 202 */
+/***/ (function(module, exports, __webpack_require__) {
+
 "use strict";
 /* WEBPACK VAR INJECTION */(function(__dirname) {
 const path = __webpack_require__(1);
 const childProcess = __webpack_require__(18);
-const isWsl = __webpack_require__(202);
+const isWsl = __webpack_require__(203);
 
 module.exports = (target, opts) => {
 	if (typeof target !== 'string') {
@@ -27879,12 +28028,12 @@ module.exports = (target, opts) => {
 /* WEBPACK VAR INJECTION */}.call(exports, "/"))
 
 /***/ }),
-/* 202 */
+/* 203 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
 
-const os = __webpack_require__(203);
+const os = __webpack_require__(204);
 const fs = __webpack_require__(2);
 
 const isWsl = () => {
@@ -27911,7 +28060,7 @@ if (process.env.__IS_WSL_TEST__) {
 
 
 /***/ }),
-/* 203 */
+/* 204 */
 /***/ (function(module, exports) {
 
 module.exports = require("os");

@@ -4,7 +4,8 @@ const yargs   = require('yargs/yargs'),
 export function getCommandLine() {
   yargs()
     .usage('Usage: $0 <cmd> [args]')
-    .example('$0 business --phone=654123456', 'get the business ith this number phone')
+    .example('$0 business --phone=654123456', 'get the business with this number phone')
+    .demandCommand(1)
     .command('business [args]', 'Get a habit-business', {
       args: {
         describe: "What features do you want?",
@@ -18,10 +19,8 @@ export function getCommandLine() {
         default: 'active',
       }
     })
-    .help('h')
     .argv
 
-  // return [process.argv.slice(2)[0], parser(process.argv.slice(2))]
   var values = parser(process.argv.slice(2))
   var hab_type = values._[0]
   delete values._

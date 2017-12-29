@@ -1,5 +1,6 @@
 {
   "business_domain": "https://empresas-10-1-110-15.habssl.net/dev.php/pro/",
+  "browser" : "google-chrome",
   "habitissimo_db": {
     "name": "default",
     "user": "root",

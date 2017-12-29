@@ -30,7 +30,9 @@ export function executeQuery(query) {
 export function getQuery(values) {
   let key_values = Object.keys(values);
   if (!business_complexed.includes(values) && key_values.length === 1) {
-    return 'SELECT * from hab_business where '+ key_values + "= '" + values[key_values] + "'"
+    return 'SELECT * from hab_business where '+ 
+      key_values + " = '" + values[key_values] + "'" +
+      " order by id desc limit 1"
   }
 
   return null;
