@@ -7396,6 +7396,7 @@ var params = (0, _commandLine.getCommandLine)();
 
 if (params.hab_type === 'business') {
   var query = (0, _database.getQuery)(params.values);
+  console.log(query);
   if (query) {
     var normalized_name = (0, _database.executeQuery)(query);
 
@@ -7424,7 +7425,7 @@ var yargs = __webpack_require__(58),
     parser = __webpack_require__(24);
 
 function getCommandLine() {
-  yargs().usage('Usage: $0 <cmd> [args]').example('$0 business --phone=654123456', 'get the business ith this number phone').command('business [args]', 'Get a habit-business', {
+  yargs().usage('Usage: $0 <cmd> [args]').example('$0 business --phone=654123456', 'get the business with this number phone').demandCommand(1).command('business [args]', 'Get a habit-business', {
     args: {
       describe: "What features do you want?",
       choices: ['id', 'mail', 'phone', 'active']
@@ -18829,7 +18830,7 @@ function executeQuery(query) {
 function getQuery(values) {
   var key_values = Object.keys(values);
   if (!business_complexed.includes(values) && key_values.length === 1) {
-    return 'SELECT * from hab_business where ' + key_values + " = '" + values[key_values] + "'" + " order by id desc limit 1";
+    return 'SELECT * from hab_business where ' + key_values + " = '" + values[key_values] + "'" + "and business_status = 1 order by id desc limit 1";
   }
 
   return null;
