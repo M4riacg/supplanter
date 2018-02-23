@@ -8,6 +8,8 @@
   "dependencies": {
     "dotenv": "^4.0.0",
     "jsonfile": "^4.0.0",
+    "make-dir": "^1.2.0",
+    "mysql": "^2.15.0",
     "opn": "^5.1.0",
     "yargs": "^9.0.1",
     "yargs-parser": "^7.0.0"

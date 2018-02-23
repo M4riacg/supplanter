@@ -5,7 +5,6 @@ export function getCommandLine() {
   yargs()
     .usage('Usage: $0 <cmd> [args]')
     .example('$0 business --phone=654123456', 'get the business with this number phone')
-    .demandCommand(1)
     .command('business [args]', 'Get a habit-business', {
       args: {
         describe: "What features do you want?",
