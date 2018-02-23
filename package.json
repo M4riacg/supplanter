@@ -7,6 +7,7 @@
   "license": "ISC",
   "dependencies": {
     "dotenv": "^4.0.0",
+    "inquirer": "^5.1.0",
     "jsonfile": "^4.0.0",
     "make-dir": "^1.2.0",
     "mysql": "^2.15.0",
@@ -26,8 +27,7 @@
     "webpack": "^3.8.1"
   },
   "scripts": {
-    "babel": "babel --presets es2015 js/main.js -o build/main.bundle.js",
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "webpack"
+    "build": "webpack",
+    "babel": "babel-node src/index.js"
   }
 }

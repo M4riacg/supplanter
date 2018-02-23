@@ -21,20 +21,20 @@ if (!config) {
   console.log('Quizás es necesario que lo modifiques para que funcione :)');
 }
 
-var params = getCommandLine()
+getCommandLine().then(function(params) {
+  if (params.hab_type === 'business') {
+    var query = getQuery(params.values, config.command_args.business.complexed)
+    console.log(query)
+    if (query) {
+      var normalized_name = executeQuery(query, config.habitissimo_db)
 
-if (params.hab_type === 'business') {
-  var query = getQuery(params.values)
-
-  if (query) {
-    var normalized_name = executeQuery(query)
-
-    normalized_name
-    .then(function(params) {
-      opn(config.business_domain+params, {app: 'google-chrome'})
+      normalized_name
+      .then(function(params) {
+        opn(config.business_domain+params, {app: 'google-chrome'})
+        .catch(err => console.log(err))
+      })
       .catch(err => console.log(err))
-    })
-    .catch(err => console.log(err))
+    }
+
   }
-  
-}
+})

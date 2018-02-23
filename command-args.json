@@ -1,0 +1,26 @@
+{
+  "business": {
+    "simple": [
+      "id",
+      "user_id",
+      "bsubcategory_id",
+      "name",
+      "normalized_name",
+      "email",
+      "tax_id",
+      "quality_index",
+      "business_status",
+      "membership"
+    ],
+    "complexed": [
+      "with_spcd"
+    ]
+  },
+  "customer": {
+    "simple": [
+      "id",
+      "user_id",
+      "email"
+    ]
+  }
+}

@@ -1,10 +1,6 @@
-var mysql = require('mysql'),
-    config = require('./config.json');
+var mysql = require('mysql')
 
-var db_config = config.habitissimo_db,
-    business_complexed = config.command_args.business.complexed;
-
-export function executeQuery(query) {
+export function executeQuery(query, db_config) {
 
   var c = mysql.createConnection({
     host     : db_config.host,
@@ -27,7 +23,7 @@ export function executeQuery(query) {
   })
 }
 
-export function getQuery(values) {
+export function getQuery(values, business_complexed) {
   let key_values = Object.keys(values);
   if (!business_complexed.includes(key_values) && key_values.length === 1) {
     return 'SELECT * from hab_business where '+ 

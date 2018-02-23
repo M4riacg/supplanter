@@ -1,29 +1,52 @@
-const yargs   = require('yargs/yargs'),
-      parser  = require('yargs-parser')
+var inquirer = require('inquirer');
+var command_args = require('../command-args.json')
 
 export function getCommandLine() {
-  yargs()
-    .usage('Usage: $0 <cmd> [args]')
-    .example('$0 business --phone=654123456', 'get the business with this number phone')
-    .command('business [args]', 'Get a habit-business', {
-      args: {
-        describe: "What features do you want?",
-        choices: ['id', 'mail', 'phone', 'active'],
+  var questions = [
+    {
+      type: 'list',
+      name: 'user_type',
+      message: 'What user type do you need?',
+      choices: ['Business', 'Customer'],
+      filter: function(val) {
+        return val.toLowerCase();
       }
-    })
-    .command('customer [args]', 'Get a habit-customer', {
-      args: {
-        describe: 'What features do you want?',
-        choices: ['id', 'mail', 'phone', 'active'],
-        default: 'active',
+    },
+    {
+      type: 'list',
+      name: 'filter',
+      message: 'What filter do you need?',
+      choices: command_args.business.simple,
+      when: userIs('business')
+    },
+    {
+      type: 'list',
+      name: 'filter',
+      message: 'What filter do you need?',
+      choices: command_args.customer.simple,
+      when: userIs('customer')
+    },
+    {
+      type: 'input',
+      name: 'value',
+      message: 'Introduce the value:',
+    }
+  ];
+
+  function userIs(type) {
+    return function(answers) {
+      return answers['user_type'] == type;
+    }
+  }
+
+  return new Promise((resolve) => {
+    inquirer.prompt(questions).then(answers => {
+      // console.log(JSON.stringify(answers, null, '  '));
+      var hab_type = answers['user_type']
+      var values = {
+        [answers['filter']]: answers['value'],
       }
+      resolve({hab_type, values})
     })
-    .help()
-    .argv
-
-  var values = parser(process.argv.slice(2))
-  var hab_type = values._[0]
-  delete values._
-
-  return {hab_type, values}
+  })
 }
