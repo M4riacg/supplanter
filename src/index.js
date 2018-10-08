@@ -23,18 +23,13 @@ if (!config) {
 
 getCommandLine().then(function(params) {
   if (params.hab_type === 'business') {
-    var query = getQuery(params.values, config.command_args.business.complexed)
-    console.log(query)
-    if (query) {
-      var normalized_name = executeQuery(query, config.habitissimo_db)
+    var normalized_name = executeQuery(params.values, config)
 
-      normalized_name
-      .then(function(params) {
-        opn(config.business_domain+params, {app: 'google-chrome'})
-        .catch(err => console.log(err))
-      })
+    normalized_name
+    .then(function(params) {
+      opn(config.business_domain+params, {app: 'google-chrome'})
       .catch(err => console.log(err))
-    }
-
+    })
+    .catch(err => console.log(err))
   }
 })

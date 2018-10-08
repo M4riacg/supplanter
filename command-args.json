@@ -12,8 +12,16 @@
       "business_status",
       "membership"
     ],
-    "complexed": [
-      "with_spcd"
+    "join": {
+      "has_projects": {
+        "table": "hab_business_extra",
+        "field": "projects",
+        "value": 1
+      }
+    },
+    "customized": [
+      "with_spcd",
+      "verified"
     ]
   },
   "customer": {
