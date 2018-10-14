@@ -13,10 +13,10 @@
       "membership"
     ],
     "join": {
-      "has_projects": {
+      "number of projects": {
         "table": "hab_business_extra",
-        "field": "projects",
-        "value": 1
+        "pk": "business_id",
+        "field": "projects"
       }
     },
     "customized": [

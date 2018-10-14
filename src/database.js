@@ -1,14 +1,15 @@
 var mysql = require('mysql')
 
-function getQuery(c, values, customized) {
+function getQuery(c, values, business_params) {
   let key_values = Object.keys(values);
-  if (!customized.indexOf(key_values[0]) > -1) {
+  if (!business_params.customized.indexOf(key_values[0]) > -1) {
 
-    var query = 'SELECT * from hab_business WHERE '
-    // create method to add inner joins
+    var query = 'SELECT * from hab_business '
+    query = addRelations(query, business_params, values)
+    query += ' WHERE '
     key_values.forEach( function(key, index) {
       if (index !== 0) query += ' AND '
-      query += key + ' = ' + c.escape(values[key])
+      query += getkey() + ' = ' + c.escape(values[key])
     })
 
     query += ' ORDER BY id DESC LIMIT 1';
@@ -17,6 +18,23 @@ function getQuery(c, values, customized) {
     console.log('pending to code')
   }
   return null;
+}
+
+function addRelations(query, business_params, filters) {
+  filters.forEach(key, value => {
+    if (key in business_params.join) {
+      query += ' INNER JOIN ' + business_params[key].table
+                + ' ON hab_business.id = ' + business_params[key].table + '.' + business_params[key].pk;
+    }
+  });
+  return query;
+}
+
+function getkey(key, business_params) {
+  if (key in business_params.join) {
+    return business_params[key].field;
+  }
+  return key;
 }
 
 export function executeQuery(values, config) {
@@ -30,7 +48,7 @@ export function executeQuery(values, config) {
   })
 
   return new Promise((resolve, reject) => {
-    var query = getQuery(c, values, config.command_args.business.customized)
+    var query = getQuery(c, values, config.command_args.business)
     console.log(query)
     c.query(query, (error, results, fields) => {
       if (error) {
