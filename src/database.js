@@ -1,9 +1,10 @@
+const command_args = require('../command-args.json')
 var mysql = require('mysql')
 
-function getQuery(c, values, business_params) {
+function getQuery(c, values) {
+  const  business_params = command_args.business
   let key_values = Object.keys(values);
-  if (!business_params.customized.indexOf(key_values[0]) > -1) {
-
+  if (!(key_values in Object.keys(business_params.customized))) {
     var query = 'SELECT * from hab_business '
     query = addRelations(query, business_params, values)
     query += ' WHERE '
@@ -23,15 +24,15 @@ function getQuery(c, values, business_params) {
 function addRelations(query, business_params, filters) {
   Object.keys(filters).forEach(key => {
     if (key in business_params.join) {
-      query += ' INNER JOIN ' + business_params[key].table
-                + ' ON hab_business.id = ' + business_params[key].table + '.' + business_params[key].pk;
+      query += ' INNER JOIN ' + business_params.join[key].table
+                + ' ON hab_business.id = ' + business_params.join[key].table + '.' + business_params.join[key].pk;
     }
   });
   return query;
 }
 
 function getkey(key, business_params) {
-  if (key in business_params.join) {
+  if (key in Object.keys(business_params.join)) {
     return business_params[key].field;
   }
   return key;
@@ -48,7 +49,7 @@ export function executeQuery(values, config) {
   })
 
   return new Promise((resolve, reject) => {
-    var query = getQuery(c, values, config.command_args.business)
+    var query = getQuery(c, values)
     console.log(query)
     c.query(query, (error, results, fields) => {
       if (error) {
