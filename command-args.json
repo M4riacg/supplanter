@@ -1,28 +1,69 @@
 {
   "business": {
-    "simple": [
-      "id",
-      "user_id",
-      "bsubcategory_id",
-      "name",
-      "normalized_name",
-      "email",
-      "tax_id",
-      "quality_index",
-      "business_status",
-      "membership"
-    ],
-    "join": {
-      "number of projects": {
-        "table": "hab_business_extra",
-        "pk": "business_id",
-        "field": "projects"
+    "simple": {
+      "id": {
+        "description": "pk of hab_business",
+        "type": "Number"
+      },
+      "user_id": {
+        "description": "asd",
+        "type": "Number"
+      },
+      "bsubcategory_id": {
+        "description": "asd",
+        "type": "Number"
+      },
+      "name": {
+        "description": "asd",
+        "type": "String"
+      },
+      "normalized_name": {
+        "description": "asd",
+        "type": "String"
+      },
+      "email": {
+        "description": "asd",
+        "alias": "e",
+        "type": "String"
+      },
+      "tax_id": {
+        "description": "asd",
+        "type": "Number"
+      },
+      "quality_index": {
+        "description": "asd",
+        "type": "Number"
+      },
+      "business_status": {
+        "description": "asd",
+        "alias": "s",
+        "type": "Number"
+      },
+      "membership": {
+        "description": "asd",
+        "alias": "m",
+        "type": "Number"
       }
     },
-    "customized": [
-      "with_spcd",
-      "verified"
-    ]
+    "join": {
+      "number_of_projects": {
+        "table": "hab_business_extra",
+        "pk": "business_id",
+        "field": "projects",
+        "description": "dfg",
+        "type": "Number"
+      }
+    },
+    "customized": {
+      "spcd": {
+        "description": "123",
+        "type": "Number"
+      },
+      "verified": {
+        "description": "456",
+        "type": "Boolean"
+      }
+    }
   },
   "customer": {
     "simple": [

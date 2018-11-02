@@ -1,5 +1,5 @@
 import { getCommandLine } from './command-line'
-import { getQuery, executeQuery } from './database'
+import { executeQuery } from './database'
 
 var jsonfile = require('jsonfile')
 var opn = require('opn')
@@ -11,6 +11,7 @@ var config_path = path.join(home, '/.config/supplanter/')
 var name_config_file = 'config.json'
 
 var config = jsonfile.readFileSync(config_path+name_config_file, {throws: false})
+console.log('Reading config from: ' + config_path+name_config_file)
 
 if (!config) {
   makeDir(config_path).then(path => {
@@ -21,15 +22,14 @@ if (!config) {
   console.log('Quizás es necesario que lo modifiques para que funcione :)');
 }
 
-getCommandLine().then(function(params) {
-  if (params.hab_type === 'business') {
-    var normalized_name = executeQuery(params.values, config)
+const params = getCommandLine()
+if (params.hab_type === 'business') {
+  const normalized_name = executeQuery(params.values, config)
 
-    normalized_name
-    .then(function(params) {
-      opn(config.business_domain+params, {app: 'google-chrome'})
-      .catch(err => console.log(err))
-    })
+  normalized_name
+  .then(function(params) {
+    opn(config.business_domain+params, {app: 'google-chrome'})
     .catch(err => console.log(err))
-  }
-})
+  })
+  .catch(err => console.log(err))
+}
