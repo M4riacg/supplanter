@@ -15,7 +15,7 @@ var questions = [
     type: 'checkbox',
     name: 'filter',
     message: 'What filters do you need?',
-    choices: (command_args.business.simple).concat(command_args.business.complexed),
+    choices: (command_args.business.simple).concat(command_args.business.join),
     when: userIs('business'),
     validate: function(answer) {
       if (answer.length < 1) {

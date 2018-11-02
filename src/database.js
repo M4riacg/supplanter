@@ -9,7 +9,7 @@ function getQuery(c, values, business_params) {
     query += ' WHERE '
     key_values.forEach( function(key, index) {
       if (index !== 0) query += ' AND '
-      query += getkey() + ' = ' + c.escape(values[key])
+      query += getkey(key, business_params) + ' = ' + c.escape(values[key])
     })
 
     query += ' ORDER BY id DESC LIMIT 1';
@@ -21,7 +21,7 @@ function getQuery(c, values, business_params) {
 }
 
 function addRelations(query, business_params, filters) {
-  filters.forEach(key, value => {
+  Object.keys(filters).forEach(key => {
     if (key in business_params.join) {
       query += ' INNER JOIN ' + business_params[key].table
                 + ' ON hab_business.id = ' + business_params[key].table + '.' + business_params[key].pk;
