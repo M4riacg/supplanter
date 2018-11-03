@@ -51,7 +51,8 @@
         "pk": "business_id",
         "field": "projects",
         "description": "dfg",
-        "type": "Number"
+        "type": "Number",
+        "alias": "p"
       }
     },
     "customized": {

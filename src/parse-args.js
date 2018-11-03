@@ -40,6 +40,9 @@ const prepareComplexed = (options, args) => {
     if (args[key]['type']) {
       option.type = eval(args[key]['type'])
     }
+    if (args[key]['alias']) {
+      option.alias = args[key]['alias']
+    }
     options.push(option)
   })
 

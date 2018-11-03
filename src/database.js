@@ -5,7 +5,7 @@ function getQuery(c, values) {
   const  business_params = command_args.business
   let key_values = Object.keys(values);
   if (!(key_values in Object.keys(business_params.customized))) {
-    var query = 'SELECT * from hab_business '
+    var query = 'SELECT normalized_name from hab_business '
     query = addRelations(query, business_params, values)
     query += ' WHERE '
     key_values.forEach( function(key, index) {
@@ -32,8 +32,10 @@ function addRelations(query, business_params, filters) {
 }
 
 function getkey(key, business_params) {
-  if (key in Object.keys(business_params.join)) {
-    return business_params[key].field;
+  const key_filters = Object.keys(business_params.join)
+
+  if (key_filters.indexOf(key) > -1) {
+    return business_params.join[key].field;
   }
   return key;
 }
@@ -55,7 +57,8 @@ export function executeQuery(values, config) {
       if (error) {
         reject(error)
       } else if(results[0]) {
-        resolve(results[0].normalized_name)
+        console.log(results[0])
+        resolve(results[0])
       } else {
         console.log('No results found')
       }
